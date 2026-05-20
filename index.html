@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>&lt;답 말고 식 찾기&gt; 매직믹서 수업</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
+    <style>
+        body { 
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif; 
+            -webkit-tap-highlight-color: transparent;
+        }
+        .dice {
+            width: 55px; height: 55px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.35rem; font-weight: bold; border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.1s ease-in-out;
+        }
+        @media (min-width: 640px) {
+            .dice { width: 65px; height: 65px; font-size: 1.6rem; }
+        }
+        .dice-black-10 { background-color: #1f2937; color: white; border: 2px solid #374151; }
+        .dice-black-1 { background-color: #374151; color: white; border: 2px solid #4b5563; }
+        .dice-white { background-color: white; color: #1f2937; border: 2px solid #e5e7eb; }
+        .rolling { animation: shake 0.5s infinite; }
+        
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        canvas.drawing-board { 
+            border: 1px solid #d1d5db; 
+            border-radius: 0.75rem; 
+            cursor: crosshair; 
+            touch-action: none; 
+            background-color: white; 
+            width: 100%; 
+            height: 220px; 
+        }
+        @media (min-width: 640px) {
+            canvas.drawing-board { height: 280px; }
+        }
+        
+        /* 하단 수학 키패드 활성화 시 터치 보정 공간 확보 */
+        .helper-bar-active { padding-bottom: 9.5rem; }
+        @media (min-width: 768px) {
+            .helper-bar-active { padding-bottom: 6.5rem; }
+        }
+        
+        /* 거듭제곱 위첨자 스타일 최적화 */
+        sup {
+            font-size: 0.75em;
+            vertical-align: super;
+            line-height: 0;
+            font-weight: bold;
+            color: #4f46e5;
+            margin-left: 1px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 transition-all duration-300">
+
+<div class="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
+    <header class="text-center mb-6 sm:mb-8 relative">
+        <div class="text-xs sm:text-sm font-bold text-slate-500 mb-1 tracking-wider bg-slate-200 inline-block px-3 py-1 rounded-full">법동중학교 수학</div>
+        <h1 class="text-3xl sm:text-5xl font-extrabold text-indigo-700 mt-3 mb-2 tracking-tight">&lt;답 말고 식 찾기&gt;</h1>
+        <p class="text-sm sm:text-base text-slate-600">매직믹서 주사위 숫자를 조합하여 목표 숫자를 만들어 보세요!</p>
+    </header>
+
+    <div id="dice-simulator-container" class="bg-white rounded-2xl shadow-md p-4 sm:p-6 mb-6 border border-slate-100 hidden">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
+            <h2 class="text-xl sm:text-2xl font-bold text-slate-800 flex items-center">
+                <span class="mr-2">🔮</span> 현재 주사위 상태
+            </h2>
+            <button id="rollDiceBtn" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-sm transition duration-300 ease-in-out transform active:scale-95 focus:outline-none">
+                주사위 굴리기!
+            </button>
+        </div>
+
+        <div class="flex flex-col md:flex-row justify-center items-stretch gap-4 md:gap-6">
+            <!-- 검정 주사위 영역 -->
+            <div class="flex-1 flex flex-col items-center p-4 bg-slate-100 rounded-xl border border-slate-200 justify-center">
+                <span class="text-xs sm:text-sm font-semibold text-slate-500 mb-3">검은색 (목표 만들기)</span>
+                <div class="flex gap-3">
+                    <div id="dice-b10" class="dice dice-black-10">00</div>
+                    <div id="dice-b1" class="dice dice-black-1">0</div>
+                </div>
+                <div class="mt-3 text-xs sm:text-sm text-slate-600">
+                    합: <span id="black-sum" class="font-bold text-indigo-600">-</span> |
+                    차: <span id="black-diff" class="font-bold text-rose-600">-</span>
+                </div>
+            </div>
+
+            <!-- 흰색 주사위 영역 (5개) -->
+            <div class="flex-[1.5] flex flex-col items-center p-4 bg-blue-50/50 rounded-xl border border-blue-100 justify-center">
+                <span class="text-xs sm:text-sm font-semibold text-blue-500 mb-3">흰색 (재료 숫자)</span>
+                <div class="flex flex-wrap justify-center gap-2" id="white-dice-container">
+                    <div class="dice dice-white w-dice">-</div>
+                    <div class="dice dice-white w-dice">-</div>
+                    <div class="dice dice-white w-dice">-</div>
+                    <div class="dice dice-white w-dice">-</div>
+                    <div class="dice dice-white w-dice">-</div>
+                </div>
+                <div class="mt-3 text-xs text-slate-400">나온 숫자를 한 번씩만 사용하세요!</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="border-b border-slate-200 mb-6 overflow-x-auto whitespace-nowrap scrollbar-none">
+        <nav class="flex space-x-1 sm:space-x-2" aria-label="Tabs">
+            <button class="tab-btn bg-slate-100 text-slate-600 hover:text-slate-800 px-4 py-3 font-semibold text-sm sm:text-base rounded-t-xl focus:outline-none active" data-target="warmup">몸풀기</button>
+            <button class="tab-btn bg-slate-100 text-slate-600 hover:text-slate-800 px-4 py-3 font-semibold text-sm sm:text-base rounded-t-xl focus:outline-none" data-target="level1">Level 1 (합)</button>
+            <button class="tab-btn bg-slate-100 text-slate-600 hover:text-slate-800 px-4 py-3 font-semibold text-sm sm:text-base rounded-t-xl focus:outline-none" data-target="level2">Level 2 (차)</button>
+            <button class="tab-btn bg-slate-100 text-slate-600 hover:text-slate-800 px-4 py-3 font-semibold text-sm sm:text-base rounded-t-xl focus:outline-none" data-target="level3">Level 3 (모둠전)</button>
+        </nav>
+    </div>
+
+    <!-- 몸풀기 탭 (주사위 숨김 상태 시작) -->
+    <div id="warmup" class="tab-content active bg-white p-5 sm:p-6 rounded-2xl shadow border border-slate-100">
+        <h3 class="text-lg sm:text-xl font-bold mb-4 text-orange-600 flex items-center">
+            <span class="mr-2">🔥</span> 몸풀기 문제
+        </h3>
+        <div class="mb-6 bg-orange-50/70 p-4 rounded-xl text-slate-700 text-xs sm:text-sm leading-relaxed">
+            숫자 <strong class="text-indigo-700">1, 2, 3</strong>과 괄호, 사칙연산(+, -, *, /), <strong class="text-orange-600">음수 기호(-) 및 거듭제곱(^)</strong>을 활용하여 아래 주어진 목표 정답을 만들어 보세요!<br>
+            <span class="text-xs text-orange-600 font-semibold block mt-1">💡 입력창을 선택하면 터치/클릭으로 손쉽게 거듭제곱을 넣는 입력 도우미가 나옵니다.</span>
+        </div>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- 몸풀기 문제 리스트 -->
+            <div id="warmup-card-0" class="flex flex-col bg-slate-50 p-4 rounded-xl border border-slate-200 justify-between transition-all">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="warmup-input-0" class="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white font-medium text-sm sm:text-base" placeholder="예시: 3 - 2 - 1" data-preview-id="warmup-preview-0">
+                        <span class="font-bold text-base sm:text-lg whitespace-nowrap text-slate-700">= 0</span>
+                        <button onclick="checkWarmup('warmup-input-0', 0)" class="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-2.5 px-3 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap">확인</button>
+                    </div>
+                    <div id="warmup-preview-0" class="text-xs mt-1.5 font-bold text-indigo-500 min-h-[1.2rem]">입력 중: -</div>
+                </div>
+                <div class="warmup-feedback text-xs font-semibold mt-2 hidden"></div>
+            </div>
+
+            <div id="warmup-card-1" class="flex flex-col bg-slate-50 p-4 rounded-xl border border-slate-200 justify-between transition-all">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="warmup-input-1" class="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white font-medium text-sm sm:text-base" placeholder="예시: (3 - 2) * 1" data-preview-id="warmup-preview-1">
+                        <span class="font-bold text-base sm:text-lg whitespace-nowrap text-slate-700">= 1</span>
+                        <button onclick="checkWarmup('warmup-input-1', 1)" class="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-2.5 px-3 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap">확인</button>
+                    </div>
+                    <div id="warmup-preview-1" class="text-xs mt-1.5 font-bold text-indigo-500 min-h-[1.2rem]">입력 중: -</div>
+                </div>
+                <div class="warmup-feedback text-xs font-semibold mt-2 hidden"></div>
+            </div>
+
+            <div id="warmup-card-m1" class="flex flex-col bg-slate-50 p-4 rounded-xl border border-slate-200 justify-between transition-all">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="warmup-input-m1" class="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white font-medium text-sm sm:text-base" placeholder="예시: 1 - 2" data-preview-id="warmup-preview-m1">
+                        <span class="font-bold text-base sm:text-lg whitespace-nowrap text-slate-700">= -1</span>
+                        <button onclick="checkWarmup('warmup-input-m1', -1)" class="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-2.5 px-3 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap">확인</button>
+                    </div>
+                    <div id="warmup-preview-m1" class="text-xs mt-1.5 font-bold text-indigo-500 min-h-[1.2rem]">입력 중: -</div>
+                </div>
+                <div class="warmup-feedback text-xs font-semibold mt-2 hidden"></div>
+            </div>
+
+            <div id="warmup-card-2" class="flex flex-col bg-slate-50 p-4 rounded-xl border border-slate-200 justify-between transition-all">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="warmup-input-2" class="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white font-medium text-sm sm:text-base" placeholder="예시: 3 - 1" data-preview-id="warmup-preview-2">
+                        <span class="font-bold text-base sm:text-lg whitespace-nowrap text-slate-700">= 2</span>
+                        <button onclick="checkWarmup('warmup-input-2', 2)" class="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-2.5 px-3 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap">확인</button>
+                    </div>
+                    <div id="warmup-preview-2" class="text-xs mt-1.5 font-bold text-indigo-500 min-h-[1.2rem]">입력 중: -</div>
+                </div>
+                <div class="warmup-feedback text-xs font-semibold mt-2 hidden"></div>
+            </div>
+
+            <div id="warmup-card-m2" class="flex flex-col bg-slate-50 p-4 rounded-xl border border-slate-200 justify-between transition-all">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="warmup-input-m2" class="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white font-medium text-sm sm:text-base" placeholder="식을 입력해 주세요" data-preview-id="warmup-preview-m2">
+                        <span class="font-bold text-base sm:text-lg whitespace-nowrap text-slate-700">= -2</span>
+                        <button onclick="checkWarmup('warmup-input-m2', -2)" class="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-2.5 px-3 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap">확인</button>
+                    </div>
+                    <div id="warmup-preview-m2" class="text-xs mt-1.5 font-bold text-indigo-500 min-h-[1.2rem]">입력 중: -</div>
+                </div>
+                <div class="warmup-feedback text-xs font-semibold mt-2 hidden"></div>
+            </div>
+
+            <div id="warmup-card-3" class="flex flex-col bg-slate-50 p-4 rounded-xl border border-slate-200 justify-between transition-all">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="warmup-input-3" class="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white font-medium text-sm sm:text-base" placeholder="식을 입력해 주세요" data-preview-id="warmup-preview-3">
+                        <span class="font-bold text-base sm:text-lg whitespace-nowrap text-slate-700">= 3</span>
+                        <button onclick="checkWarmup('warmup-input-3', 3)" class="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-2.5 px-3 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap">확인</button>
+                    </div>
+                    <div id="warmup-preview-3" class="text-xs mt-1.5 font-bold text-indigo-500 min-h-[1.2rem]">입력 중: -</div>
+                </div>
+                <div class="warmup-feedback text-xs font-semibold mt-2 hidden"></div>
+            </div>
+
+            <div id="warmup-card-m3" class="flex flex-col bg-slate-50 p-4 rounded-xl border border-slate-200 justify-between transition-all">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="warmup-input-m3" class="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white font-medium text-sm sm:text-base" placeholder="식을 입력해 주세요" data-preview-id="warmup-preview-m3">
+                        <span class="font-bold text-base sm:text-lg whitespace-nowrap text-slate-700">= -3</span>
+                        <button onclick="checkWarmup('warmup-input-m3', -3)" class="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-2.5 px-3 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap">확인</button>
+                    </div>
+                    <div id="warmup-preview-m3" class="text-xs mt-1.5 font-bold text-indigo-500 min-h-[1.2rem]">입력 중: -</div>
+                </div>
+                <div class="warmup-feedback text-xs font-semibold mt-2 hidden"></div>
+            </div>
+
+            <div id="warmup-card-4" class="flex flex-col bg-slate-50 p-4 rounded-xl border border-slate-200 justify-between transition-all">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="warmup-input-4" class="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white font-medium text-sm sm:text-base" placeholder="식을 입력해 주세요" data-preview-id="warmup-preview-4">
+                        <span class="font-bold text-base sm:text-lg whitespace-nowrap text-slate-700">= 4</span>
+                        <button onclick="checkWarmup('warmup-input-4', 4)" class="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-2.5 px-3 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap">확인</button>
+                    </div>
+                    <div id="warmup-preview-4" class="text-xs mt-1.5 font-bold text-indigo-500 min-h-[1.2rem]">입력 중: -</div>
+                </div>
+                <div class="warmup-feedback text-xs font-semibold mt-2 hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Level 1 (개인전 - 합 만들기) -->
+    <div id="level1" class="tab-content bg-white p-5 sm:p-6 rounded-2xl shadow border border-slate-100">
+        <h3 class="text-lg sm:text-xl font-bold mb-2 text-indigo-600">Level 1 (개인전) - 합 만들기</h3>
+        <p class="mb-4 text-xs sm:text-sm text-slate-600">선생님이 굴린 매직믹서에서 <strong class="text-indigo-600">2개의 검정 주사위 수의 합</strong>을 만드세요. 흰색 주사위 수는 모두 한 번씩만 써야 하며, <strong class="text-indigo-600">사칙연산, 괄호, 음수, 거듭제곱(^)</strong>을 활용할 수 있습니다!</p>
+        
+        <div class="bg-indigo-50 p-4 rounded-xl mb-6 text-center border border-indigo-100">
+            <span class="text-slate-600 text-sm sm:text-base">현재 목표 (합):</span>
+            <span class="text-3xl sm:text-4xl font-extrabold text-indigo-700 ml-2 block sm:inline target-sum">-</span>
+        </div>
+
+        <div class="mb-6">
+            <label class="block text-slate-700 font-bold mb-2 text-sm sm:text-base">학생 발표 식 입력 및 검증:</label>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input type="text" id="l1-input" class="flex-1 shadow-sm border rounded-lg py-3 px-4 text-slate-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base sm:text-lg transition-all" placeholder="주사위를 먼저 굴려주세요" onkeydown="if(event.key === 'Enter') checkExpression('l1-input', 'sum')" data-preview-id="l1-preview">
+                <button onclick="checkExpression('l1-input', 'sum')" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-sm active:scale-95 focus:outline-none whitespace-nowrap">검사하기</button>
+            </div>
+            <div id="l1-preview" class="text-xs mt-2 font-bold text-indigo-500 min-h-[1.2rem]">입력 중: -</div>
+            
+            <div id="l1-result-container" class="mt-4 hidden p-4 rounded-xl border font-bold text-sm sm:text-base flex items-center transition-all">
+                <span id="l1-result-icon" class="mr-2 text-xl sm:text-2xl"></span>
+                <span id="l1-result-text"></span>
+            </div>
+        </div>
+        
+        <!-- 화이트보드 -->
+        <div class="board-container">
+            <div class="flex justify-between items-center mb-2">
+                <label class="text-slate-700 font-bold text-sm sm:text-base">✍️ 연습 공간 (손글씨 필기)</label>
+                <button class="clear-board-btn text-xs sm:text-sm text-rose-500 hover:text-rose-700 font-semibold transition-all">지우기</button>
+            </div>
+            <canvas class="drawing-board"></canvas>
+        </div>
+    </div>
+
+    <!-- Level 2 (개인전 - 차 만들기) -->
+    <div id="level2" class="tab-content bg-white p-5 sm:p-6 rounded-2xl shadow border border-slate-100">
+        <h3 class="text-lg sm:text-xl font-bold mb-2 text-rose-600">Level 2 (개인전) - 차 만들기</h3>
+        <p class="mb-4 text-xs sm:text-sm text-slate-600">선생님이 굴린 매직믹서에서 <strong class="text-rose-600">2개의 검정 주사위 수 중 작은 수에서 큰 수를 뺀 값</strong>을 만드세요. 흰색 주사위 수는 모두 한 번씩만 써야 하며, <strong class="text-rose-600">사칙연산, 괄호, 음수, 거듭제곱(^)</strong>을 활용할 수 있습니다!</p>
+        
+        <div class="bg-rose-50 p-4 rounded-xl mb-6 text-center border border-rose-100">
+            <span class="text-slate-600 text-sm sm:text-base">현재 목표 (작은수-큰수):</span>
+            <span class="text-3xl sm:text-4xl font-extrabold text-rose-700 ml-2 block sm:inline target-diff">-</span>
+        </div>
+
+        <div class="mb-6">
+            <label class="block text-slate-700 font-bold mb-2 text-sm sm:text-base">학생 발표 식 입력 및 검증:</label>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input type="text" id="l2-input" class="flex-1 shadow-sm border rounded-lg py-3 px-4 text-slate-700 leading-tight focus:outline-none focus:ring-2 focus:ring-rose-500 text-base sm:text-lg transition-all" placeholder="주사위를 먼저 굴려주세요" onkeydown="if(event.key === 'Enter') checkExpression('l2-input', 'diff')" data-preview-id="l2-preview">
+                <button onclick="checkExpression('l2-input', 'diff')" class="w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-sm active:scale-95 focus:outline-none whitespace-nowrap">검사하기</button>
+            </div>
+            <div id="l2-preview" class="text-xs mt-2 font-bold text-rose-500 min-h-[1.2rem]">입력 중: -</div>
+            
+            <div id="l2-result-container" class="mt-4 hidden p-4 rounded-xl border font-bold text-sm sm:text-base flex items-center transition-all">
+                <span id="l2-result-icon" class="mr-2 text-xl sm:text-2xl"></span>
+                <span id="l2-result-text"></span>
+            </div>
+        </div>
+
+        <!-- 화이트보드 -->
+        <div class="board-container">
+            <div class="flex justify-between items-center mb-2">
+                <label class="text-slate-700 font-bold text-sm sm:text-base">✍️ 연습 공간 (손글씨 필기)</label>
+                <button class="clear-board-btn text-xs sm:text-sm text-rose-500 hover:text-rose-700 font-semibold transition-all">지우기</button>
+            </div>
+            <canvas class="drawing-board"></canvas>
+        </div>
+    </div>
+
+    <!-- Level 3 (모둠전 - 다양한 식 찾기) -->
+    <div id="level3" class="tab-content bg-white p-5 sm:p-6 rounded-2xl shadow border border-slate-100">
+        <h3 class="text-lg sm:text-xl font-bold mb-2 text-purple-600">Level 3 (모둠전) - 다양한 식 찾기</h3>
+        <p class="mb-4 text-xs sm:text-sm text-slate-600">목표는 <strong class="text-purple-600">검정 주사위 수의 합</strong>입니다. 제한시간 내에 같은 결과가 나오는 다양한 식을 최대한 많이 찾아 입력하세요! (<strong class="text-purple-600">음수, 거듭제곱(^)</strong> 포함 다양한 연산 사용 가능)</p>
+        
+        <div class="bg-purple-50 p-4 rounded-xl mb-6 text-center border border-purple-100">
+            <span class="text-slate-600 text-sm sm:text-base">현재 목표 (합):</span>
+            <span class="text-3xl sm:text-4xl font-extrabold text-purple-700 ml-2 block sm:inline target-sum">-</span>
+        </div>
+
+        <!-- 태블릿, PC 2열 / 모바일 1열 그리드 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="space-y-4">
+                <!-- 각 식 입력칸 -->
+                <div class="flex flex-col bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-8 font-bold text-slate-500 text-center text-sm sm:text-base">식1</span>
+                        <input type="text" id="l3-i1" class="flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base" oninput="checkGroupExpression(this)" data-preview-id="l3-p1">
+                        <span class="status-icon w-8 text-center text-lg sm:text-xl"></span>
+                    </div>
+                    <div id="l3-p1" class="text-[11px] font-bold text-purple-500 mt-1 pl-10 min-h-[14px]">입력 중: -</div>
+                </div>
+                <div class="flex flex-col bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-8 font-bold text-slate-500 text-center text-sm sm:text-base">식2</span>
+                        <input type="text" id="l3-i2" class="flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base" oninput="checkGroupExpression(this)" data-preview-id="l3-p2">
+                        <span class="status-icon w-8 text-center text-lg sm:text-xl"></span>
+                    </div>
+                    <div id="l3-p2" class="text-[11px] font-bold text-purple-500 mt-1 pl-10 min-h-[14px]">입력 중: -</div>
+                </div>
+                <div class="flex flex-col bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-8 font-bold text-slate-500 text-center text-sm sm:text-base">식3</span>
+                        <input type="text" id="l3-i3" class="flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base" oninput="checkGroupExpression(this)" data-preview-id="l3-p3">
+                        <span class="status-icon w-8 text-center text-lg sm:text-xl"></span>
+                    </div>
+                    <div id="l3-p3" class="text-[11px] font-bold text-purple-500 mt-1 pl-10 min-h-[14px]">입력 중: -</div>
+                </div>
+                <div class="flex flex-col bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-8 font-bold text-slate-500 text-center text-sm sm:text-base">식4</span>
+                        <input type="text" id="l3-i4" class="flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base" oninput="checkGroupExpression(this)" data-preview-id="l3-p4">
+                        <span class="status-icon w-8 text-center text-lg sm:text-xl"></span>
+                    </div>
+                    <div id="l3-p4" class="text-[11px] font-bold text-purple-500 mt-1 pl-10 min-h-[14px]">입력 중: -</div>
+                </div>
+                <div class="flex flex-col bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-8 font-bold text-slate-500 text-center text-sm sm:text-base">식5</span>
+                        <input type="text" id="l3-i5" class="flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base" oninput="checkGroupExpression(this)" data-preview-id="l3-p5">
+                        <span class="status-icon w-8 text-center text-lg sm:text-xl"></span>
+                    </div>
+                    <div id="l3-p5" class="text-[11px] font-bold text-purple-500 mt-1 pl-10 min-h-[14px]">입력 중: -</div>
+                </div>
+            </div>
+            <div class="space-y-4">
+                <div class="flex flex-col bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-8 font-bold text-slate-500 text-center text-sm sm:text-base">식6</span>
+                        <input type="text" id="l3-i6" class="flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base" oninput="checkGroupExpression(this)" data-preview-id="l3-p6">
+                        <span class="status-icon w-8 text-center text-lg sm:text-xl"></span>
+                    </div>
+                    <div id="l3-p6" class="text-[11px] font-bold text-purple-500 mt-1 pl-10 min-h-[14px]">입력 중: -</div>
+                </div>
+                <div class="flex flex-col bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-8 font-bold text-slate-500 text-center text-sm sm:text-base">식7</span>
+                        <input type="text" id="l3-i7" class="flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base" oninput="checkGroupExpression(this)" data-preview-id="l3-p7">
+                        <span class="status-icon w-8 text-center text-lg sm:text-xl"></span>
+                    </div>
+                    <div id="l3-p7" class="text-[11px] font-bold text-purple-500 mt-1 pl-10 min-h-[14px]">입력 중: -</div>
+                </div>
+                <div class="flex flex-col bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-8 font-bold text-slate-500 text-center text-sm sm:text-base">식8</span>
+                        <input type="text" id="l3-i8" class="flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base" oninput="checkGroupExpression(this)" data-preview-id="l3-p8">
+                        <span class="status-icon w-8 text-center text-lg sm:text-xl"></span>
+                    </div>
+                    <div id="l3-p8" class="text-[11px] font-bold text-purple-500 mt-1 pl-10 min-h-[14px]">입력 중: -</div>
+                </div>
+                <div class="flex flex-col bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-8 font-bold text-slate-500 text-center text-sm sm:text-base">식9</span>
+                        <input type="text" id="l3-i9" class="flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base" oninput="checkGroupExpression(this)" data-preview-id="l3-p9">
+                        <span class="status-icon w-8 text-center text-lg sm:text-xl"></span>
+                    </div>
+                    <div id="l3-p9" class="text-[11px] font-bold text-purple-500 mt-1 pl-10 min-h-[14px]">입력 중: -</div>
+                </div>
+                <div class="flex flex-col bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-8 font-bold text-slate-500 text-center text-sm sm:text-base">식10</span>
+                        <input type="text" id="l3-i10" class="flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base" oninput="checkGroupExpression(this)" data-preview-id="l3-p10">
+                        <span class="status-icon w-8 text-center text-lg sm:text-xl"></span>
+                    </div>
+                    <div id="l3-p10" class="text-[11px] font-bold text-purple-500 mt-1 pl-10 min-h-[14px]">입력 중: -</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-right mb-6">
+            <button onclick="clearLevel3Inputs()" class="w-full sm:w-auto text-sm bg-slate-200 hover:bg-slate-300 text-slate-700 py-2 px-5 rounded-lg shadow-sm font-semibold transition-all">입력칸 모두 비우기</button>
+        </div>
+
+        <!-- 화이트보드 -->
+        <div class="board-container">
+            <div class="flex justify-between items-center mb-2">
+                <label class="text-slate-700 font-bold text-sm sm:text-base">✍️ 연습 공간 (손글씨 필기)</label>
+                <button class="clear-board-btn text-xs sm:text-sm text-rose-500 hover:text-rose-700 font-semibold transition-all">지우기</button>
+            </div>
+            <canvas class="drawing-board"></canvas>
+        </div>
+    </div>
+</div>
+
+<div id="math-helper-toolbar" class="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-indigo-200 shadow-2xl px-3 py-3 sm:py-4 z-50 transform translate-y-full transition-transform duration-300 ease-out flex flex-col md:flex-row justify-center items-center gap-2">
+    <div class="w-full text-center md:w-auto md:text-left mb-1 md:mb-0 md:mr-3">
+        <span class="text-[11px] sm:text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1.5 rounded-md border border-indigo-100">수식 도우미</span>
+    </div>
+    <div class="flex flex-wrap justify-center gap-1.5 max-w-full">
+        <button onmousedown="event.preventDefault(); insertSymbol('(')" class="bg-slate-100 hover:bg-slate-200 active:scale-90 text-slate-800 font-extrabold h-10 w-10 sm:h-11 sm:w-11 rounded-lg text-sm transition-all border border-slate-300 shadow-sm flex items-center justify-center font-mono">(</button>
+        <button onmousedown="event.preventDefault(); insertSymbol(')')" class="bg-slate-100 hover:bg-slate-200 active:scale-90 text-slate-800 font-extrabold h-10 w-10 sm:h-11 sm:w-11 rounded-lg text-sm transition-all border border-slate-300 shadow-sm flex items-center justify-center font-mono">)</button>
+        <button onmousedown="event.preventDefault(); insertSymbol('^2')" class="bg-indigo-50 hover:bg-indigo-100 active:scale-90 text-indigo-700 font-extrabold px-3 h-10 sm:h-11 rounded-lg text-xs sm:text-sm transition-all border border-indigo-200 shadow-sm flex items-center justify-center">² (제곱)</button>
+        <button onmousedown="event.preventDefault(); insertSymbol('^3')" class="bg-indigo-50 hover:bg-indigo-100 active:scale-90 text-indigo-700 font-extrabold px-3 h-10 sm:h-11 rounded-lg text-xs sm:text-sm transition-all border border-indigo-200 shadow-sm flex items-center justify-center">³ (세제곱)</button>
+        <button onmousedown="event.preventDefault(); insertSymbol('^')" class="bg-purple-50 hover:bg-purple-100 active:scale-90 text-purple-700 font-extrabold px-3 h-10 sm:h-11 rounded-lg text-xs sm:text-sm transition-all border border-purple-200 shadow-sm flex items-center justify-center">^ (거듭제곱)</button>
+        <button onmousedown="event.preventDefault(); insertSymbol('-')" class="bg-slate-100 hover:bg-slate-200 active:scale-90 text-slate-800 font-extrabold h-10 w-10 sm:h-11 sm:w-11 rounded-lg text-sm transition-all border border-slate-300 shadow-sm flex items-center justify-center font-mono">-</button>
+        <button onmousedown="event.preventDefault(); insertSymbol('+')" class="bg-slate-100 hover:bg-slate-200 active:scale-90 text-slate-800 font-extrabold h-10 w-10 sm:h-11 sm:w-11 rounded-lg text-sm transition-all border border-slate-300 shadow-sm flex items-center justify-center font-mono">+</button>
+        <button onmousedown="event.preventDefault(); insertSymbol('*')" class="bg-slate-100 hover:bg-slate-200 active:scale-90 text-slate-800 font-extrabold h-10 w-10 sm:h-11 sm:w-11 rounded-lg text-sm transition-all border border-slate-300 shadow-sm flex items-center justify-center font-mono">×</button>
+        <button onmousedown="event.preventDefault(); insertSymbol('/')" class="bg-slate-100 hover:bg-slate-200 active:scale-90 text-slate-800 font-extrabold h-10 w-10 sm:h-11 sm:w-11 rounded-lg text-sm transition-all border border-slate-300 shadow-sm flex items-center justify-center font-mono">÷</button>
+    </div>
+    <button onclick="closeHelperBar()" class="w-full md:w-auto md:ml-3 bg-slate-500 hover:bg-slate-600 text-white font-bold h-9 md:h-11 px-4 rounded-lg text-xs sm:text-sm transition shadow-sm active:scale-95 flex items-center justify-center">닫기</button>
+</div>
+
+<footer class="mt-12 py-8 border-t border-slate-200 text-center text-xs sm:text-sm text-slate-500">
+    <p class="mb-3 font-semibold text-slate-600">법동중학교 수학 수업도구</p>
+    <div class="inline-block bg-indigo-50 text-indigo-600 px-4 py-2 rounded-full text-xs font-bold shadow-sm border border-indigo-100">
+        Creative by 예진T
+    </div>
+</footer>
+
+<script>
+    let currentBlackSum = null;
+    let currentBlackDiff = null;
+    let currentWhiteNumbers = [];
+    let lastFocusedInput = null;
+
+    const helperBar = document.getElementById('math-helper-toolbar');
+
+    function formatToMathStyle(expr) {
+        if (!expr || !expr.trim()) return "입력 중: -";
+        
+        let formatted = expr;
+        
+        // 사칙연산 치환
+        formatted = formatted.replace(/\*/g, ' × ').replace(/\//g, ' ÷ ');
+        formatted = formatted.replace(/\+/g, ' + ').replace(/(?<!\()-(?!\d)/g, ' - ');
+
+        // 괄호가 포함된 거듭제곱 형태 ex) 3^(x+2) -> 3^(x+2) 위첨자 치환
+        formatted = formatted.replace(/\^(\(([^)]+)\))/g, '<sup>$2</sup>');
+        // 단일 문자/숫자/부호 지수형태
+        formatted = formatted.replace(/\^([0-9a-zA-Z\-+]+)/g, '<sup>$1</sup>');
+        // 예외 복구
+        formatted = formatted.replace(/\^/g, '<sup>?</sup>');
+
+        return `수식 미리보기: <span class="text-indigo-600 font-extrabold text-sm sm:text-base">${formatted}</span>`;
+    }
+
+    function initLiveFormulaPreview() {
+        const inputs = document.querySelectorAll('input[type="text"]');
+        inputs.forEach(input => {
+            const previewId = input.dataset.previewId;
+            if (!previewId) return;
+            const previewEl = document.getElementById(previewId);
+            
+            const handleInput = () => {
+                previewEl.innerHTML = formatToMathStyle(input.value);
+            };
+
+            input.addEventListener('input', handleInput);
+            input.addEventListener('keyup', handleInput);
+        });
+    }
+
+    function initFocusTracker() {
+        const inputs = document.querySelectorAll('input[type="text"]');
+        inputs.forEach(input => {
+            input.addEventListener('focus', () => {
+                lastFocusedInput = input;
+                helperBar.classList.remove('translate-y-full');
+                document.body.classList.add('helper-bar-active');
+                
+                // 모바일 뷰포트 스크롤 보정
+                setTimeout(() => {
+                    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 250);
+            });
+        });
+    }
+
+    function insertSymbol(symbol) {
+        if (!lastFocusedInput) return;
+        const input = lastFocusedInput;
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const text = input.value;
+        const before = text.substring(0, start);
+        const after = text.substring(end, text.length);
+        
+        input.value = before + symbol + after;
+        
+        input.focus();
+        const newCursorPos = start + symbol.length;
+        input.setSelectionRange(newCursorPos, newCursorPos);
+        
+        const event = new Event('input', { bubbles: true });
+        input.dispatchEvent(event);
+    }
+
+    function closeHelperBar() {
+        helperBar.classList.add('translate-y-full');
+        document.body.classList.remove('helper-bar-active');
+    }
+
+    const rollBtn = document.getElementById('rollDiceBtn');
+    const diceB10 = document.getElementById('dice-b10');
+    const diceB1 = document.getElementById('dice-b1');
+    const wDices = document.querySelectorAll('.w-dice');
+    
+    function cleanExpression(expr) {
+        if (!expr) return "";
+        let str = expr.trim();
+        if (str.startsWith('(') && str.endsWith(')')) {
+            let depth = 0;
+            let match = true;
+            for (let i = 0; i < str.length - 1; i++) {
+                if (str[i] === '(') depth++;
+                if (str[i] === ')') depth--;
+                if (depth === 0) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) {
+                return cleanExpression(str.slice(1, -1).trim());
+            }
+        }
+        return str;
+    }
+
+    function solveSingle(arr, target) {
+        if (arr.length === 1) {
+            if (Math.abs(arr[0].val - target) < 1e-5) {
+                return arr[0].expr;
+            }
+            return null;
+        }
+        for (let i = 0; i < arr.length; i++) {
+            for (let j = i + 1; j < arr.length; j++) {
+                const remaining = [];
+                for (let k = 0; k < arr.length; k++) {
+                    if (k !== i && k !== j) remaining.push(arr[k]);
+                }
+                const a = arr[i];
+                const b = arr[j];
+                
+                const ops = [
+                    { val: a.val + b.val, expr: `(${a.expr} + ${b.expr})` },
+                    { val: a.val * b.val, expr: `(${a.expr} * ${b.expr})` },
+                    { val: a.val - b.val, expr: `(${a.expr} - ${b.expr})` },
+                    { val: b.val - a.val, expr: `(${b.expr} - ${a.expr})` }
+                ];
+                
+                if (Math.abs(b.val) > 1e-5 && Number.isInteger(a.val) && Number.isInteger(b.val) && a.val % b.val === 0) {
+                    ops.push({ val: a.val / b.val, expr: `(${a.expr} / ${b.expr})` });
+                }
+                if (Math.abs(a.val) > 1e-5 && Number.isInteger(b.val) && Number.isInteger(a.val) && b.val % a.val === 0) {
+                    ops.push({ val: b.val / a.val, expr: `(${b.expr} / ${a.expr})` });
+                }
+                
+                if (Number.isInteger(b.val) && b.val >= 0 && b.val <= 3 && Number.isInteger(a.val) && a.val >= 0 && a.val <= 5) {
+                    ops.push({ val: Math.pow(a.val, b.val), expr: `(${a.expr}^${b.expr})` });
+                }
+                if (Number.isInteger(a.val) && a.val >= 0 && a.val <= 3 && Number.isInteger(b.val) && b.val >= 0 && b.val <= 5) {
+                    ops.push({ val: Math.pow(b.val, a.val), expr: `(${b.expr}^${a.expr})` });
+                }
+
+                for (const op of ops) {
+                    if (isNaN(op.val) || !isFinite(op.val)) continue;
+                    remaining.push(op);
+                    const res = solveSingle(remaining, target);
+                    if (res) return res;
+                    remaining.pop();
+                }
+            }
+        }
+        return null;
+    }
+
+    let solveAllIterations = 0;
+    function solveMultiple(arr, target, solutions = new Set(), maxSolutions = 3) {
+        solveAllIterations++;
+        if (solveAllIterations > 1500 || solutions.size >= maxSolutions) return Array.from(solutions);
+        if (arr.length === 1) {
+            if (Math.abs(arr[0].val - target) < 1e-5) {
+                solutions.add(cleanExpression(arr[0].expr));
+            }
+            return Array.from(solutions);
+        }
+        for (let i = 0; i < arr.length; i++) {
+            for (let j = i + 1; j < arr.length; j++) {
+                const remaining = [];
+                for (let k = 0; k < arr.length; k++) {
+                    if (k !== i && k !== j) remaining.push(arr[k]);
+                }
+                const a = arr[i];
+                const b = arr[j];
+                const ops = [
+                    { val: a.val + b.val, expr: `(${a.expr} + ${b.expr})` },
+                    { val: a.val * b.val, expr: `(${a.expr} * ${b.expr})` },
+                    { val: a.val - b.val, expr: `(${a.expr} - ${b.expr})` },
+                    { val: b.val - a.val, expr: `(${b.expr} - ${a.expr})` }
+                ];
+                if (Math.abs(b.val) > 1e-5 && Number.isInteger(a.val) && Number.isInteger(b.val) && a.val % b.val === 0) {
+                    ops.push({ val: a.val / b.val, expr: `(${a.expr} / ${b.expr})` });
+                }
+                if (Math.abs(a.val) > 1e-5 && Number.isInteger(b.val) && Number.isInteger(a.val) && b.val % a.val === 0) {
+                    ops.push({ val: b.val / a.val, expr: `(${b.expr} / ${a.expr})` });
+                }
+                if (Number.isInteger(b.val) && b.val >= 0 && b.val <= 3 && Number.isInteger(a.val) && a.val >= 0 && a.val <= 5) {
+                    ops.push({ val: Math.pow(a.val, b.val), expr: `(${a.expr}^${b.expr})` });
+                }
+                if (Number.isInteger(a.val) && a.val >= 0 && a.val <= 3 && Number.isInteger(b.val) && b.val >= 0 && b.val <= 5) {
+                    ops.push({ val: Math.pow(b.val, a.val), expr: `(${b.expr}^${a.expr})` });
+                }
+
+                for (const op of ops) {
+                    if (isNaN(op.val) || !isFinite(op.val)) continue;
+                    remaining.push(op);
+                    solveMultiple(remaining, target, solutions, maxSolutions);
+                    if (solutions.size >= maxSolutions) return Array.from(solutions);
+                    remaining.pop();
+                }
+            }
+        }
+        return Array.from(solutions);
+    }
+
+    let solvedSumList = [];
+    let solvedDiffList = [];
+
+    rollBtn.addEventListener('click', () => {
+        diceB10.classList.add('rolling');
+        diceB1.classList.add('rolling');
+        wDices.forEach(d => d.classList.add('rolling'));
+        
+        rollBtn.disabled = true;
+        rollBtn.innerText = "굴리는 중...";
+
+        setTimeout(() => {
+            diceB10.classList.remove('rolling');
+            diceB1.classList.remove('rolling');
+            wDices.forEach(d => d.classList.remove('rolling'));
+            
+            let b10Val = 0, b1Val = 0;
+            let finalWhiteNumbers = [];
+            let sumExpr = null;
+            let diffExpr = null;
+            let attempts = 0;
+
+            while (attempts < 120) {
+                attempts++;
+                b10Val = Math.floor(Math.random() * 10) * 10; 
+                b1Val = Math.floor(Math.random() * 10); 
+                
+                let testWhite = [];
+                for (let i = 0; i < 5; i++) {
+                    testWhite.push(Math.floor(Math.random() * 10));
+                }
+
+                const targetSum = b10Val + b1Val;
+                const targetDiff = Math.min(b10Val, b1Val) - Math.max(b10Val, b1Val);
+
+                const solverInput = testWhite.map(v => ({ val: v, expr: String(v) }));
+                sumExpr = solveSingle(JSON.parse(JSON.stringify(solverInput)), targetSum);
+                diffExpr = solveSingle(JSON.parse(JSON.stringify(solverInput)), targetDiff);
+
+                if (sumExpr && diffExpr) {
+                    finalWhiteNumbers = testWhite;
+                    break;
+                }
+            }
+
+            if (finalWhiteNumbers.length === 0) {
+                finalWhiteNumbers = [1, 2, 3, 4, 5];
+                b10Val = 10;
+                b1Val = 5;
+                sumExpr = "(1 + 2) * 3 + 4 + 2"; 
+                diffExpr = "1 - 2 - 3 - 4 - 5"; 
+            }
+
+            currentWhiteNumbers = finalWhiteNumbers;
+            wDices.forEach((d, idx) => {
+                d.innerText = currentWhiteNumbers[idx];
+            });
+
+            diceB10.innerText = b10Val === 0 ? "00" : b10Val;
+            diceB1.innerText = b1Val;
+
+            currentBlackSum = b10Val + b1Val;
+            currentBlackDiff = Math.min(b10Val, b1Val) - Math.max(b10Val, b1Val);
+
+            document.getElementById('black-sum').innerText = currentBlackSum;
+            document.getElementById('black-diff').innerText = currentBlackDiff;
+
+            document.querySelectorAll('.target-sum').forEach(el => el.innerText = currentBlackSum);
+            document.querySelectorAll('.target-diff').forEach(el => el.innerText = currentBlackDiff);
+
+            const solverInput = currentWhiteNumbers.map(v => ({ val: v, expr: String(v) }));
+            solveAllIterations = 0;
+            solvedSumList = solveMultiple(JSON.parse(JSON.stringify(solverInput)), currentBlackSum, new Set(), 3);
+            if (solvedSumList.length === 0 && sumExpr) {
+                solvedSumList.push(cleanExpression(sumExpr));
+            }
+            
+            solveAllIterations = 0;
+            solvedDiffList = solveMultiple(JSON.parse(JSON.stringify(solverInput)), currentBlackDiff, new Set(), 1);
+            if (solvedDiffList.length === 0 && diffExpr) {
+                solvedDiffList.push(cleanExpression(diffExpr));
+            }
+
+            document.getElementById('l1-input').placeholder = `예시: ${cleanExpression(sumExpr)} = ${currentBlackSum}`;
+            document.getElementById('l2-input').placeholder = `예시: ${cleanExpression(diffExpr)} = ${currentBlackDiff}`;
+
+            document.getElementById('l1-input').value = '';
+            document.getElementById('l1-input').className = 'flex-1 shadow-sm border rounded-lg py-3 px-4 text-slate-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base sm:text-lg transition-all';
+            document.getElementById('l1-preview').innerHTML = "입력 중: -";
+            const l1ResContainer = document.getElementById('l1-result-container');
+            l1ResContainer.classList.add('hidden');
+            
+            document.getElementById('l2-input').value = '';
+            document.getElementById('l2-input').className = 'flex-1 shadow-sm border rounded-lg py-3 px-4 text-slate-700 leading-tight focus:outline-none focus:ring-2 focus:ring-rose-500 text-base sm:text-lg transition-all';
+            document.getElementById('l2-preview').innerHTML = "입력 중: -";
+            const l2ResContainer = document.getElementById('l2-result-container');
+            l2ResContainer.classList.add('hidden');
+            
+            clearLevel3Inputs();
+
+            rollBtn.disabled = false;
+            rollBtn.innerText = "주사위 다시 굴리기";
+        }, 800);
+    });
+
+    function checkWarmup(inputId, targetValue) {
+        const inputEl = document.getElementById(inputId);
+        const value = inputEl.value.trim();
+        const cardEl = inputEl.closest('[id^="warmup-card-"]');
+        const feedbackEl = cardEl.querySelector('.warmup-feedback');
+        
+        if (!value) {
+            cardEl.className = "flex flex-col bg-amber-50 p-4 rounded-xl border border-amber-300 transition-all duration-200 shadow-sm";
+            feedbackEl.innerText = "⚠️ 식을 먼저 채워준 다음에 [확인] 버튼을 누르세요.";
+            feedbackEl.className = "warmup-feedback text-xs font-bold mt-2 text-amber-600 block";
+            return;
+        }
+
+        const digits = value.match(/\d/g) || [];
+        const illegalDigits = digits.filter(d => !['1', '2', '3'].includes(d));
+        if (illegalDigits.length > 0) {
+            cardEl.className = "flex flex-col bg-red-50 p-4 rounded-xl border border-red-300 transition-all duration-200 shadow-sm";
+            const uniqueIllegal = Array.from(new Set(illegalDigits)).sort();
+            feedbackEl.innerText = `❌ 규칙 위반! 몸풀기에서는 1, 2, 3 이외의 다른 숫자(${uniqueIllegal.join(', ')})를 사용할 수 없습니다.`;
+            feedbackEl.className = "warmup-feedback text-xs font-bold mt-2 text-red-500 block";
+            return;
+        }
+        
+        let result;
+        try {
+            let cleanExpr = value.replace(/\s+/g, '').replace(/×/g, '*').replace(/÷/g, '/');
+            result = math.evaluate(cleanExpr);
+            
+            if (typeof result !== 'number' || !isFinite(result)) {
+                throw new Error("Invalid format");
+            }
+        } catch (e) {
+            cardEl.className = "flex flex-col bg-red-50 p-4 rounded-xl border border-red-300 transition-all duration-200 shadow-sm";
+            feedbackEl.innerText = "❌ 올바른 수학 수식이 아닙니다. (연산자나 괄호 쌍을 점검해 보세요)";
+            feedbackEl.className = "warmup-feedback text-xs font-bold mt-2 text-red-500 block";
+            return;
+        }
+        
+        if (Math.abs(result - targetValue) < 0.0001) {
+            cardEl.className = "flex flex-col bg-green-50 p-4 rounded-xl border border-green-300 transition-all duration-200 shadow-sm";
+            feedbackEl.innerText = `✅ 완벽합니다! (계산 결과: ${result})`;
+            feedbackEl.className = "warmup-feedback text-xs font-bold mt-2 text-green-600 block";
+        } else {
+            cardEl.className = "flex flex-col bg-yellow-50 p-4 rounded-xl border border-yellow-300 transition-all duration-200 shadow-sm";
+            feedbackEl.innerText = `❌ 틀렸습니다. (계산 결과: ${result}, 목표: ${targetValue})`;
+            feedbackEl.className = "warmup-feedback text-xs font-bold mt-2 text-amber-600 block";
+        }
+    }
+
+    function validateExpression(expr, targetType) {
+        if (!expr) return { valid: false, msg: "수식을 입력해주세요." };
+        if (currentWhiteNumbers.length === 0) return { valid: false, msg: "먼저 '주사위 굴리기!' 버튼을 눌러주세요." };
+
+        let result;
+        try {
+            let cleanExpr = expr.replace(/\s+/g, '').replace(/×/g, '*').replace(/÷/g, '/');
+            result = math.evaluate(cleanExpr);
+            
+            if (typeof result !== 'number' || !isFinite(result)) {
+                return { valid: false, msg: "올바른 수식이 아닙니다. (계산 불가)" };
+            }
+        } catch (e) {
+            return { valid: false, msg: "수식 문법 오류 (괄호 짝이나 거듭제곱 기호 ^ 를 확인해 주세요)" };
+        }
+
+        const numbersInExpr = expr.match(/\d/g); 
+        if (!numbersInExpr) return { valid: false, msg: "사용된 숫자가 없습니다." };
+
+        let usedNums = numbersInExpr.map(Number).sort();
+        let requiredNums = [...currentWhiteNumbers].sort();
+
+        if (usedNums.length !== requiredNums.length) {
+            return { valid: false, msg: `주사위 5개를 모두 한 번씩만 사용해야 합니다. (현재 사용된 숫자: ${usedNums.length}개)` };
+        }
+
+        for (let i = 0; i < usedNums.length; i++) {
+            if (usedNums[i] !== requiredNums[i]) {
+                return { valid: false, msg: "흰색 주사위에 표시된 숫자들과 일치하지 않습니다." };
+            }
+        }
+
+        const targetValue = targetType === 'sum' ? currentBlackSum : currentBlackDiff;
+        
+        if (Math.abs(result - targetValue) < 0.0001) {
+             return { valid: true, msg: `성공! 결과값은 ${result} 입니다.` };
+        } else {
+             return { valid: false, msg: `수식의 결과가 목표값과 다릅니다. (결과: ${result}, 목표: ${targetValue})` };
+        }
+    }
+
+    function checkExpression(inputId, type) {
+        const inputEl = document.getElementById(inputId);
+        const containerEl = document.getElementById(inputId.replace('-input', '-result-container'));
+        const iconEl = document.getElementById(inputId.replace('-input', '-result-icon'));
+        const textEl = document.getElementById(inputId.replace('-input', '-result-text'));
+        
+        const check = validateExpression(inputEl.value, type);
+        containerEl.classList.remove('hidden');
+        
+        if (check.valid) {
+            containerEl.className = 'mt-4 p-4 rounded-xl border border-green-200 bg-green-50 text-green-700 font-bold text-sm sm:text-base flex items-center transition-all';
+            iconEl.innerText = "✅";
+            textEl.innerText = check.msg;
+            inputEl.className = 'flex-1 shadow-sm border border-green-300 rounded-lg py-3 px-4 text-green-800 bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-400 text-base sm:text-lg transition-all';
+        } else {
+            containerEl.className = 'mt-4 p-4 rounded-xl border border-red-200 bg-red-50 text-red-700 font-bold text-sm sm:text-base flex items-center transition-all';
+            iconEl.innerText = "❌";
+            textEl.innerText = check.msg;
+            inputEl.className = 'flex-1 shadow-sm border border-red-300 rounded-lg py-3 px-4 text-red-800 bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-400 text-base sm:text-lg transition-all';
+        }
+    }
+
+    function checkGroupExpression(inputEl) {
+        const iconEl = inputEl.nextElementSibling;
+        const previewId = inputEl.dataset.previewId;
+        const previewEl = document.getElementById(previewId);
+
+        if (previewEl) {
+            previewEl.innerHTML = formatToMathStyle(inputEl.value);
+        }
+
+        if (!inputEl.value.trim()) {
+            iconEl.innerText = "";
+            inputEl.className = 'flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base';
+            return;
+        }
+
+        const check = validateExpression(inputEl.value, 'sum');
+        
+        if (check.valid) {
+            iconEl.innerText = "✅";
+            iconEl.className = "status-icon w-8 text-center text-lg sm:text-xl text-green-500 font-bold";
+            inputEl.className = 'flex-1 min-w-0 p-2.5 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 bg-green-50 text-green-800 text-sm sm:text-base';
+            if (previewEl) previewEl.className = "text-[11px] font-bold text-green-600 mt-1 pl-10 min-h-[14px]";
+        } else {
+            iconEl.innerText = "❌";
+            iconEl.className = "status-icon w-8 text-center text-lg sm:text-xl text-red-500 font-bold cursor-help";
+            iconEl.title = check.msg;
+            inputEl.className = 'flex-1 min-w-0 p-2.5 border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300 bg-red-50 text-red-800 text-sm sm:text-base';
+            if (previewEl) previewEl.className = "text-[11px] font-bold text-red-500 mt-1 pl-10 min-h-[14px]";
+        }
+    }
+
+    function clearLevel3Inputs() {
+        for(let i=1; i<=10; i++) {
+            const el = document.getElementById(`l3-i${i}`);
+            if(el) {
+                el.value = '';
+                el.className = 'flex-1 min-w-0 p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white text-sm sm:text-base';
+                
+                if (solvedSumList && solvedSumList.length > 0) {
+                    const placeholderExpr = solvedSumList[(i - 1) % solvedSumList.length];
+                    el.placeholder = `예시: ${placeholderExpr} = ${currentBlackSum}`;
+                } else {
+                    const n = currentWhiteNumbers.length === 5 ? currentWhiteNumbers : [1, 2, 3, 4, 5];
+                    el.placeholder = `예시: (${n[0]} + ${n[1]}) * ${n[2]} - ${n[3]} + ${n[4]}`;
+                }
+                
+                el.nextElementSibling.innerText = '';
+                const previewEl = document.getElementById(`l3-p${i}`);
+                if (previewEl) {
+                    previewEl.innerHTML = "입력 중: -";
+                    previewEl.className = "text-[11px] font-bold text-purple-500 mt-1 pl-10 min-h-[14px]";
+                }
+            }
+        }
+    }
+
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+    const diceContainer = document.getElementById('dice-simulator-container');
+
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => {
+                b.classList.remove('bg-white', 'border-t', 'border-l', 'border-r', 'text-indigo-600', 'font-bold', 'active');
+                b.classList.add('bg-slate-100', 'text-slate-600');
+            });
+            
+            tabContents.forEach(c => c.classList.remove('active'));
+
+            btn.classList.remove('bg-slate-100', 'text-slate-600');
+            btn.classList.add('bg-white', 'border-t', 'border-l', 'border-r', 'border-slate-200', 'text-indigo-600', 'font-bold', 'active');
+            
+            const target = document.getElementById(btn.dataset.target);
+            target.classList.add('active');
+
+            if (btn.dataset.target === 'warmup') {
+                diceContainer.classList.add('hidden');
+            } else {
+                diceContainer.classList.remove('hidden');
+            }
+
+            closeHelperBar();
+            
+            setTimeout(resizeCanvases, 50);
+        });
+    });
+
+    document.querySelector('.tab-btn.active').classList.add('bg-white', 'border-t', 'border-l', 'border-r', 'border-slate-200', 'text-indigo-600', 'font-bold');
+    document.querySelector('.tab-btn.active').classList.remove('bg-slate-100');
+
+
+    const canvases = document.querySelectorAll('.drawing-board');
+    
+    canvases.forEach(canvas => {
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+            
+            const pos = getMousePos(e);
+            
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            const pos = getMousePos(e);
+            lastX = pos.x;
+            lastY = pos.y;
+        });
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('mouseout', () => isDrawing = false);
+
+        canvas.addEventListener('touchstart', (e) => {
+            isDrawing = true;
+            const pos = getMousePos(e);
+            lastX = pos.x;
+            lastY = pos.y;
+        }, {passive: false});
+        canvas.addEventListener('touchmove', draw, {passive: false});
+        canvas.addEventListener('touchend', () => isDrawing = false);
+
+        const clearBtn = canvas.parentElement.querySelector('.clear-board-btn');
+        if(clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                ctx.fillStyle = "white";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            });
+        }
+    });
+
+    function resizeCanvases() {
+        canvases.forEach(canvas => {
+            if(canvas.closest('.tab-content.active')) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(canvas, 0, 0);
+
+                const rect = canvas.parentElement.getBoundingClientRect();
+                if(rect.width > 0) {
+                    canvas.width = rect.width;
+                    const ctx = canvas.getContext('2d');
+                    ctx.strokeStyle = '#1e293b';
+                    ctx.lineWidth = 3;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    
+                    ctx.fillStyle = "white";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(tempCanvas, 0, 0);
+                }
+            }
+        });
+    }
+
+    window.addEventListener('resize', resizeCanvases);
+    window.addEventListener('orientationchange', () => {
+        setTimeout(resizeCanvases, 200);
+    });
+    
+    window.onload = function () {
+        resizeCanvases();
+        initFocusTracker();
+        initLiveFormulaPreview();
+    }
+</script>
+</body>
+</html>
